@@ -128,6 +128,7 @@ fn _spawn_chrome(chrome_path: String, port: Int, headless: Bool) raises -> Int32
     args.append("--no-first-run")
     args.append("--no-default-browser-check")
     args.append("--no-sandbox")
+    args.append("--disable-dev-shm-usage")
     args.append("--disable-gpu")
     args.append("--disable-extensions")
     args.append("--log-level=3")
