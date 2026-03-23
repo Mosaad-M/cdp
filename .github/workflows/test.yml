@@ -28,5 +28,10 @@ jobs:
             | tar xz -C "$HOME/.mojo/bin"
           echo "$HOME/.mojo/bin" >> $GITHUB_PATH
 
+      - name: Install dependencies
+        run: |
+          LD_LIBRARY_PATH="$(pwd)/.pixi/envs/default/lib" \
+            $HOME/.mojo/bin/mojo-pkg install
+
       - name: Run tests
-        run: pixi run test
+        run: pixi run test-ci
