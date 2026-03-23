@@ -1,0 +1,8 @@
+.pixi/
+.build/
+.mojo_flags
+# Local symlinks — provided by mojo-pkg install in CI
+json.mojo
+tcp.mojo
+url.mojo
+websocket.mojo
