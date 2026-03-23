@@ -69,6 +69,28 @@ fn _nanosleep(secs: Int):
     ts.free()
 
 
+fn _getenv(name: String) -> String:
+    """Read an environment variable. Returns empty string if not set."""
+    var cb = name.as_bytes()
+    var n = len(cb)
+    var buf = alloc[Int8](n + 1)
+    for i in range(n):
+        (buf + i)[] = Int8(cb[i])
+    (buf + n)[] = Int8(0)
+    var ptr = external_call["getenv", Int](buf)
+    buf.free()
+    if ptr == 0:
+        return String("")
+    var slen = external_call["strlen", Int](ptr)
+    var out = alloc[UInt8](slen)
+    _ = external_call["memcpy", Int](Int(out), ptr, slen)
+    var bytes = List[UInt8](capacity=slen)
+    for i in range(slen):
+        bytes.append((out + i)[])
+    out.free()
+    return String(unsafe_from_utf8=bytes^)
+
+
 fn _access(path: String) -> Bool:
     """Check if file exists via access(path, F_OK)."""
     var cb = path.as_bytes()
@@ -83,7 +105,14 @@ fn _access(path: String) -> Bool:
 
 
 fn chrome_available() -> Bool:
-    """Check if Chrome/Chromium is installed at a known system path."""
+    """Check if Chrome/Chromium is installed and usable.
+
+    Returns False in CI environments (GITHUB_ACTIONS=true) since
+    headless Chrome is unreliable in container sandboxes.
+    """
+    # Skip in CI: Chrome often crashes in container environments
+    if _getenv("GITHUB_ACTIONS") == "true":
+        return False
     var paths = List[String]()
     paths.append("/usr/bin/google-chrome")
     paths.append("/usr/local/bin/google-chrome")
