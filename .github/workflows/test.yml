@@ -29,7 +29,9 @@ jobs:
           echo "$HOME/.mojo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
-        run: mojo-pkg install
+        run: |
+          LD_LIBRARY_PATH="$(pwd)/.pixi/envs/default/lib" \
+            $HOME/.mojo/bin/mojo-pkg install
 
       - name: Run tests
         run: pixi run test
