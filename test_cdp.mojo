@@ -99,6 +99,58 @@ fn test_navigate_and_evaluate() raises:
     browser.close()
 
 
+fn test_click_and_type() raises:
+    """Click a button and type into an input."""
+    var browser = Browser.launch()
+    var page = browser.new_page()
+
+    page.navigate(
+        "data:text/html,<html><body>"
+        "<input id='inp' value=''>"
+        "<button id='btn' onclick=\"document.getElementById('inp').value='clicked'\">Go</button>"
+        "</body></html>"
+    )
+    page.wait_for_load()
+
+    # Type into the input
+    page.type_text("#inp", "hello world")
+    var val = page.evaluate("document.getElementById('inp').value")
+    assert_eq(val, "hello world", "type_text value")
+
+    # Click the button (overwrites value)
+    page.click("#btn")
+    var after_click = page.evaluate("document.getElementById('inp').value")
+    assert_eq(after_click, "clicked", "click sets value")
+
+    page.close()
+    browser.close()
+
+
+fn test_wait_for_selector() raises:
+    """wait_for_selector finds an element and raises on timeout."""
+    var browser = Browser.launch()
+    var page = browser.new_page()
+
+    page.navigate(
+        "data:text/html,<html><body><p id='target'>Found</p></body></html>"
+    )
+    page.wait_for_load()
+
+    # Element already present — should return immediately
+    page.wait_for_selector("#target")
+
+    # Non-existent selector should raise after short timeout
+    var got_error = False
+    try:
+        page.wait_for_selector("#nonexistent", 500)
+    except:
+        got_error = True
+    assert_true(got_error, "timeout raises error")
+
+    page.close()
+    browser.close()
+
+
 # ============================================================================
 # Main
 # ============================================================================
@@ -136,6 +188,8 @@ fn main() raises:
         print("-- Integration (Chrome) --")
         run_test("browser launch + targets", passed, failed, test_browser_launch_and_targets)
         run_test("navigate + evaluate", passed, failed, test_navigate_and_evaluate)
+        run_test("click + type_text", passed, failed, test_click_and_type)
+        run_test("wait_for_selector", passed, failed, test_wait_for_selector)
     else:
         print("-- Integration (SKIPPED — no Chrome/Chromium found) --")
 

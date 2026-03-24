@@ -91,6 +91,57 @@ fn _getenv(name: String) -> String:
     return String(unsafe_from_utf8=bytes^)
 
 
+fn _sleep_ms(ms: Int):
+    """Sleep for ms milliseconds via nanosleep()."""
+    # struct timespec { int64 tv_sec; int64 tv_nsec; }
+    var ts = alloc[UInt8](16)
+    var secs = Int64(ms // 1000)
+    var nsecs = Int64((ms % 1000) * 1_000_000)
+    for i in range(8):
+        (ts + i)[] = UInt8(Int(secs >> Int64(i * 8)) & 0xFF)
+    for i in range(8):
+        (ts + 8 + i)[] = UInt8(Int(nsecs >> Int64(i * 8)) & 0xFF)
+    _ = external_call["nanosleep", Int32](ts, Int(0))
+    ts.free()
+
+
+fn _clock_ms() -> Int:
+    """Return monotonic clock time in milliseconds via clock_gettime()."""
+    # struct timespec { int64 tv_sec; int64 tv_nsec; } at 16 bytes
+    var ts = alloc[UInt8](16)
+    for i in range(16):
+        (ts + i)[] = 0
+    _ = external_call["clock_gettime", Int32](Int32(1), ts)  # CLOCK_MONOTONIC=1
+    var secs: Int64 = 0
+    var nsecs: Int64 = 0
+    for i in range(8):
+        secs |= Int64(Int((ts + i)[]) << (i * 8))
+        nsecs |= Int64(Int((ts + 8 + i)[]) << (i * 8))
+    ts.free()
+    return Int(secs) * 1000 + Int(nsecs) // 1_000_000
+
+
+fn _escape_js(s: String) -> String:
+    """Escape a string for safe embedding inside a JS single-quoted string literal."""
+    var result = String("")
+    var bytes = s.as_bytes()
+    for i in range(len(bytes)):
+        var c = bytes[i]
+        if c == UInt8(ord("'")):
+            result += "\\'"
+        elif c == UInt8(ord("\\")):
+            result += "\\\\"
+        elif c == UInt8(ord("\n")):
+            result += "\\n"
+        elif c == UInt8(ord("\r")):
+            result += "\\r"
+        else:
+            var b = List[UInt8]()
+            b.append(c)
+            result += String(unsafe_from_utf8=b^)
+    return result
+
+
 fn _access(path: String) -> Bool:
     """Check if file exists via access(path, F_OK)."""
     var cb = path.as_bytes()
@@ -574,6 +625,89 @@ struct Page(Movable):
             + selector
             + "')].map(el => el.textContent))"
         )
+
+    fn click(mut self, selector: String) raises:
+        """Click the first element matching selector.
+
+        Args:
+            selector: CSS selector string.
+        """
+        _ = self.evaluate(
+            "document.querySelector('" + _escape_js(selector) + "').click()"
+        )
+
+    fn type_text(mut self, selector: String, text: String) raises:
+        """Set input value and dispatch input/change events.
+
+        Args:
+            selector: CSS selector for the input element.
+            text: Text to type into the element.
+        """
+        var js = (
+            "var el=document.querySelector('"
+            + _escape_js(selector)
+            + "');"
+            + "el.value='"
+            + _escape_js(text)
+            + "';"
+            + "el.dispatchEvent(new Event('input',{bubbles:true}));"
+            + "el.dispatchEvent(new Event('change',{bubbles:true}))"
+        )
+        _ = self.evaluate(js)
+
+    fn scroll_to(mut self, selector: String) raises:
+        """Scroll the first matching element into view.
+
+        Args:
+            selector: CSS selector string.
+        """
+        _ = self.evaluate(
+            "document.querySelector('"
+            + _escape_js(selector)
+            + "').scrollIntoView(true)"
+        )
+
+    fn scroll_by(mut self, x: Int, y: Int) raises:
+        """Scroll the window by (x, y) pixels.
+
+        Args:
+            x: Horizontal scroll amount in pixels.
+            y: Vertical scroll amount in pixels.
+        """
+        _ = self.evaluate(
+            "window.scrollBy(" + String(x) + "," + String(y) + ")"
+        )
+
+    fn wait_for_selector(
+        mut self, selector: String, timeout_ms: Int = 10000
+    ) raises:
+        """Poll until selector matches an element, or timeout.
+
+        Args:
+            selector: CSS selector string.
+            timeout_ms: Maximum wait time in milliseconds (default 10000).
+
+        Raises:
+            Error if selector is not found within timeout_ms.
+        """
+        var deadline = _clock_ms() + timeout_ms
+        while True:
+            var found = self.evaluate(
+                "document.querySelector('"
+                + _escape_js(selector)
+                + "') ? 'true' : 'false'"
+            )
+            if found == "true":
+                return
+            if _clock_ms() >= deadline:
+                raise Error(
+                    "wait_for_selector: '"
+                    + selector
+                    + "' not found after "
+                    + String(timeout_ms)
+                    + "ms"
+                )
+            _sleep_ms(100)
 
     fn close(mut self) raises:
         """Close the CDP connection."""
