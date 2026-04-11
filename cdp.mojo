@@ -171,6 +171,8 @@ fn chrome_available() -> Bool:
     paths.append("/usr/local/bin/chromium-browser")
     paths.append("/usr/bin/chromium")
     paths.append("/snap/bin/chromium")
+    paths.append("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    paths.append("/Applications/Chromium.app/Contents/MacOS/Chromium")
     for i in range(len(paths)):
         if _access(paths[i]):
             return True
@@ -186,6 +188,8 @@ fn _find_chrome() raises -> String:
     paths.append("/usr/local/bin/chromium-browser")
     paths.append("/usr/bin/chromium")
     paths.append("/snap/bin/chromium")
+    paths.append("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    paths.append("/Applications/Chromium.app/Contents/MacOS/Chromium")
     for i in range(len(paths)):
         if _access(paths[i]):
             return paths[i]
