@@ -26,7 +26,7 @@
 from websocket import WebSocket, WebSocketFrame
 from json import JsonValue, parse_json
 from tcp import TcpSocket
-from ffi import external_call
+from std.ffi import external_call
 from memory.unsafe_pointer import alloc
 
 
@@ -34,8 +34,8 @@ from memory.unsafe_pointer import alloc
 # Constants
 # ============================================================================
 
-alias DEFAULT_CDP_PORT = 9222
-alias DEFAULT_TIMEOUT_MS = 30000
+comptime DEFAULT_CDP_PORT = 9222
+comptime DEFAULT_TIMEOUT_MS = 30000
 
 
 # ============================================================================
