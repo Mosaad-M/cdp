@@ -12,4 +12,4 @@ test-ci = "bash build_and_run.sh test_cdp.mojo"
 format = "mblack cdp.mojo main.mojo test_cdp.mojo"
 
 [dependencies]
-mojo = ">=0.26.2"
+mojo = ">=1.0.0"
