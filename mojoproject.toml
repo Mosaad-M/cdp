@@ -1,6 +1,6 @@
 [package]
 name = "cdp"
-version = "1.1.0"
+version = "1.1.1"
 description = "Chrome DevTools Protocol (CDP) client for Mojo"
 license = "MIT"
 platforms = ["linux-64", "osx-arm64"]
@@ -9,6 +9,6 @@ platforms = ["linux-64", "osx-arm64"]
 requires = ">=1.0.0"
 
 [dependencies]
-websocket = { git = "Mosaad-M/websocket", version = ">=1.1.0" }
+websocket = { git = "Mosaad-M/websocket", version = ">=1.1.1" }
 json = { git = "Mosaad-M/json", version = ">=1.1.0" }
 tcp = { git = "Mosaad-M/tcp", version = ">=1.1.0" }

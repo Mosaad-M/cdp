@@ -153,6 +153,39 @@ def _escape_js(s: String) -> String:
     return result
 
 
+def _escape_json_string(s: String) -> String:
+    """Escape a string for safe embedding inside a JSON double-quoted string value.
+
+    Every CDP command is built by splicing values into a JSON literal via
+    plain string concatenation (no real JSON encoder). Any value containing
+    an unescaped `"` produces invalid JSON that Chrome's devtools server
+    silently drops (no response, no error, no close) -- the caller then
+    hangs until the socket's receive timeout fires, surfacing as a
+    misleading "TCP read failed" error far from the actual cause. Escape
+    every string value passed into a CDP command's JSON params with this
+    helper, not just the ones that happen to need it today.
+    """
+    var result = String("")
+    var bytes = s.as_bytes()
+    for i in range(len(bytes)):
+        var c = bytes[i]
+        if c == UInt8(ord('"')):
+            result += '\\"'
+        elif c == UInt8(ord("\\")):
+            result += "\\\\"
+        elif c == UInt8(ord("\n")):
+            result += "\\n"
+        elif c == UInt8(ord("\r")):
+            result += "\\r"
+        elif c == UInt8(ord("\t")):
+            result += "\\t"
+        else:
+            var b = List[UInt8]()
+            b.append(c)
+            result += String(unsafe_from_utf8=b^)
+    return result
+
+
 def _access(path: String) -> Bool:
     """Check if file exists via access(path, F_OK)."""
     var cb = path.as_bytes()
@@ -634,7 +667,9 @@ struct Page(Movable):
 
     def navigate(mut self, url: String) raises:
         """Navigate to a URL."""
-        _ = self._send_command("Page.navigate", '{"url":"' + url + '"}')
+        _ = self._send_command(
+            "Page.navigate", '{"url":"' + _escape_json_string(url) + '"}'
+        )
 
     def wait_for_load(mut self) raises:
         """Wait for the page to finish loading (Page.loadEventFired)."""
@@ -659,21 +694,7 @@ struct Page(Movable):
         Returns:
             String result of the expression.
         """
-        # Escape quotes in expression
-        var escaped = String("")
-        var expr_bytes = expression.as_bytes()
-        for i in range(len(expr_bytes)):
-            var c = expr_bytes[i]
-            if c == UInt8(ord('"')):
-                escaped += '\\"'
-            elif c == UInt8(ord("\\")):
-                escaped += "\\\\"
-            elif c == UInt8(ord("\n")):
-                escaped += "\\n"
-            else:
-                var byte_list = List[UInt8]()
-                byte_list.append(c)
-                escaped += String(unsafe_from_utf8=byte_list^)
+        var escaped = _escape_json_string(expression)
 
         var resp = self._send_command(
             "Runtime.evaluate",
