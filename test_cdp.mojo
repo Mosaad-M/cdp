@@ -15,12 +15,12 @@ from json import parse_json
 # ============================================================================
 
 
-fn assert_true(cond: Bool, label: String) raises:
+def assert_true(cond: Bool, label: String) raises:
     if not cond:
         raise Error(label + ": expected True, got False")
 
 
-fn assert_eq(actual: String, expected: String, label: String) raises:
+def assert_eq(actual: String, expected: String, label: String) raises:
     if actual != expected:
         raise Error(label + ": expected '" + expected + "', got '" + actual + "'")
 
@@ -30,14 +30,14 @@ fn assert_eq(actual: String, expected: String, label: String) raises:
 # ============================================================================
 
 
-fn test_browser_init() raises:
+def test_browser_init() raises:
     """Browser initializes with default values."""
     var b = Browser()
     assert_true(b.port == 9222, "default port")
     assert_true(not b._launched, "not launched")
 
 
-fn test_page_init() raises:
+def test_page_init() raises:
     """Page initializes with default values."""
     var p = Page()
     assert_true(not p._connected, "not connected")
@@ -49,7 +49,7 @@ fn test_page_init() raises:
 # ============================================================================
 
 
-fn test_browser_launch_and_targets() raises:
+def test_browser_launch_and_targets() raises:
     """Launch Chrome, get targets, close."""
     var browser = Browser.launch()
 
@@ -59,7 +59,7 @@ fn test_browser_launch_and_targets() raises:
     browser.close()
 
 
-fn test_navigate_and_evaluate() raises:
+def test_navigate_and_evaluate() raises:
     """Navigate to a page and evaluate JavaScript."""
     var browser = Browser.launch()
     var targets = browser.get_targets()
@@ -75,7 +75,7 @@ fn test_navigate_and_evaluate() raises:
                     ws_url = target.get_string("webSocketDebuggerUrl")
                     break
 
-    if len(ws_url) == 0:
+    if ws_url.byte_length() == 0:
         browser.close()
         raise Error("no page target found")
 
@@ -99,7 +99,7 @@ fn test_navigate_and_evaluate() raises:
     browser.close()
 
 
-fn test_click_and_type() raises:
+def test_click_and_type() raises:
     """Click a button and type into an input."""
     var browser = Browser.launch()
     var page = browser.new_page()
@@ -126,8 +126,8 @@ fn test_click_and_type() raises:
     browser.close()
 
 
-fn test_wait_for_selector() raises:
-    """wait_for_selector finds an element and raises on timeout."""
+def test_wait_for_selector() raises:
+    """Wait_for_selector finds an element and raises on timeout."""
     var browser = Browser.launch()
     var page = browser.new_page()
 
@@ -156,15 +156,14 @@ fn test_wait_for_selector() raises:
 # ============================================================================
 
 
-fn main() raises:
+def main() raises:
     var passed = 0
     var failed = 0
 
-    fn run_test(
+    def run_test[test_fn: def () thin raises -> None](
         name: String,
         mut passed: Int,
         mut failed: Int,
-        test_fn: fn () raises -> None,
     ):
         try:
             test_fn()
@@ -179,17 +178,17 @@ fn main() raises:
 
     # Unit tests (no browser)
     print("-- Unit Tests --")
-    run_test("browser init", passed, failed, test_browser_init)
-    run_test("page init", passed, failed, test_page_init)
+    run_test[test_browser_init]("browser init", passed, failed)
+    run_test[test_page_init]("page init", passed, failed)
 
     # Integration tests (require Chrome)
     var has_chrome = chrome_available()
     if has_chrome:
         print("-- Integration (Chrome) --")
-        run_test("browser launch + targets", passed, failed, test_browser_launch_and_targets)
-        run_test("navigate + evaluate", passed, failed, test_navigate_and_evaluate)
-        run_test("click + type_text", passed, failed, test_click_and_type)
-        run_test("wait_for_selector", passed, failed, test_wait_for_selector)
+        run_test[test_browser_launch_and_targets]("browser launch + targets", passed, failed)
+        run_test[test_navigate_and_evaluate]("navigate + evaluate", passed, failed)
+        run_test[test_click_and_type]("click + type_text", passed, failed)
+        run_test[test_wait_for_selector]("wait_for_selector", passed, failed)
     else:
         print("-- Integration (SKIPPED — no Chrome/Chromium found) --")
 
