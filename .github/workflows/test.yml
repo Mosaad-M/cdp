@@ -16,7 +16,6 @@ jobs:
           echo "CPU model: $(grep 'model name' /proc/cpuinfo | head -1)"
           echo "CPU flags: $(grep '^flags' /proc/cpuinfo | head -1)"
           grep -q avx2 /proc/cpuinfo     || { echo "MISSING: avx2 — re-queue this job"; exit 1; }
-          grep -q avx512f /proc/cpuinfo  || { echo "MISSING: avx512f — re-queue this job"; exit 1; }
 
       - name: Install Chrome
         run: |
