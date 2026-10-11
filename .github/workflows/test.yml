@@ -42,6 +42,9 @@ jobs:
       - name: Run tests
         run: pixi run test-ci
 
+      - name: Std compatibility
+        run: pixi run test-std-compat
+
   test-macos:
     runs-on: macos-14
     steps:
@@ -64,3 +67,6 @@ jobs:
 
       - name: Run tests
         run: pixi run test-ci
+
+      - name: Std compatibility
+        run: pixi run test-std-compat
