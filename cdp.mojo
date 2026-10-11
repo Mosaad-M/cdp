@@ -28,8 +28,9 @@ from json import JsonValue, parse_json
 from tcp import TcpSocket
 from std.ffi import external_call
 from std.memory import alloc
-from std.sys.info import CompilationTarget
-from std.os import abort
+from std.os import getenv
+from std.os.path import exists
+from std.time import monotonic, sleep
 
 
 # ============================================================================
@@ -59,77 +60,23 @@ def _system(cmd: String) -> Int32:
 
 
 def _nanosleep(secs: Int):
-    """Sleep for secs seconds via nanosleep()."""
-    # struct timespec { int64 tv_sec; int64 tv_nsec; } = 16 bytes
-    var ts = alloc[UInt8](16)
-    var s = Int64(secs)
-    for i in range(8):
-        ts[unsafe_offset=i] = UInt8(Int(s >> Int64(i * 8)) & 0xFF)
-    for i in range(8, 16):
-        ts[unsafe_offset=i] = 0
-    _ = external_call["nanosleep", Int32](ts, Int(0))
-    ts.unsafe_free()
+    """Sleep for secs seconds."""
+    sleep(Float64(secs))
 
 
 def _getenv(name: String) -> String:
     """Read an environment variable. Returns empty string if not set."""
-    var cb = name.as_bytes()
-    var n = len(cb)
-    var buf = alloc[Int8](n + 1)
-    for i in range(n):
-        buf[unsafe_offset=i] = Int8(cb[i])
-    buf[unsafe_offset=n] = Int8(0)
-    var ptr = external_call["getenv", Int](buf)
-    buf.unsafe_free()
-    if ptr == 0:
-        return String("")
-    var slen = external_call["strlen", Int](ptr)
-    var out = alloc[UInt8](slen)
-    _ = external_call["memcpy", Int](Int(out), ptr, slen)
-    var bytes = List[UInt8](capacity=slen)
-    for i in range(slen):
-        bytes.append(out[unsafe_offset=i])
-    out.unsafe_free()
-    return String(unsafe_from_utf8=bytes^)
+    return getenv(name)
 
 
 def _sleep_ms(ms: Int):
-    """Sleep for ms milliseconds via nanosleep()."""
-    # struct timespec { int64 tv_sec; int64 tv_nsec; }
-    var ts = alloc[UInt8](16)
-    var secs = Int64(ms // 1000)
-    var nsecs = Int64((ms % 1000) * 1_000_000)
-    for i in range(8):
-        ts[unsafe_offset=i] = UInt8(Int(secs >> Int64(i * 8)) & 0xFF)
-    for i in range(8):
-        ts[unsafe_offset=8 + i] = UInt8(Int(nsecs >> Int64(i * 8)) & 0xFF)
-    _ = external_call["nanosleep", Int32](ts, Int(0))
-    ts.unsafe_free()
+    """Sleep for ms milliseconds."""
+    sleep(Float64(ms) / 1000.0)
 
 
 def _clock_ms() -> Int:
-    """Return monotonic clock time in milliseconds via clock_gettime()."""
-    # CLOCK_MONOTONIC's numeric value is platform-specific: 1 on Linux, 6 on
-    # Darwin/macOS. Using the wrong value makes clock_gettime() fail (EINVAL)
-    # and leave `ts` untouched — since `ts` is zeroed first, _clock_ms() would
-    # then silently always return 0, turning every deadline-based wait loop in
-    # this file (e.g. wait_for_selector) into an infinite loop instead of a
-    # timeout. Raise loudly instead if that ever happens again.
-    comptime CLOCK_MONOTONIC: Int32 = 6 if CompilationTarget.is_macos() else 1
-    # struct timespec { int64 tv_sec; int64 tv_nsec; } at 16 bytes
-    var ts = alloc[UInt8](16)
-    for i in range(16):
-        ts[unsafe_offset=i] = 0
-    var ret = external_call["clock_gettime", Int32](CLOCK_MONOTONIC, ts)
-    var secs: Int64 = 0
-    var nsecs: Int64 = 0
-    for i in range(8):
-        secs |= Int64(Int(ts[unsafe_offset=i]) << (i * 8))
-        nsecs |= Int64(Int(ts[unsafe_offset=8 + i]) << (i * 8))
-    ts.unsafe_free()
-    if ret != 0:
-        abort("cdp: clock_gettime(CLOCK_MONOTONIC) failed — this would silently break every timeout in this file")
-    return Int(secs) * 1000 + Int(nsecs) // 1_000_000
+    """Return monotonic clock time in milliseconds."""
+    return Int(monotonic() // 1_000_000)
 
 
 def _escape_js(s: String) -> String:
@@ -187,16 +134,8 @@ def _escape_json_string(s: String) -> String:
 
 
 def _access(path: String) -> Bool:
-    """Check if file exists via access(path, F_OK)."""
-    var cb = path.as_bytes()
-    var n = len(cb)
-    var buf = alloc[UInt8](n + 1)
-    for i in range(n):
-        buf[unsafe_offset=i] = cb[i]
-    buf[unsafe_offset=n] = 0
-    var ret = external_call["access", Int32](buf, Int32(0))  # F_OK=0
-    buf.unsafe_free()
-    return ret == 0
+    """Check if a file exists."""
+    return exists(path)
 
 
 def chrome_available() -> Bool:
@@ -291,29 +230,27 @@ def _spawn_chrome(chrome_path: String, port: Int, headless: Bool) raises -> Int3
     for k in range(8):
         argv[unsafe_offset=n * 8 + k] = 0
 
+    # Open /dev/null with std's open() before forking: Mojo's std declares
+    # open() and close() itself, and a program may declare each C function
+    # with one signature only, so cdp must not declare them. The child dup2()s
+    # it onto stdin/stdout/stderr; the parent closes its copy below.
+    var dev_null = open("/dev/null", "rw")
+    var null_fd = Int32(dev_null._get_raw_fd())
+
     var pid = external_call["fork", Int32]()
 
     if pid == 0:
         # Child: detach, silence output, exec Chrome
         _ = external_call["setsid", Int32]()
-        var dn_b = String("/dev/null").as_bytes()
-        var dn_n = len(dn_b)
-        var dn_buf = alloc[UInt8](dn_n + 1)
-        for i in range(dn_n):
-            dn_buf[unsafe_offset=i] = dn_b[i]
-        dn_buf[unsafe_offset=dn_n] = 0
-        var null_fd = external_call["open", Int32](dn_buf, Int32(2))  # O_RDWR=2
-        if null_fd >= 0:
-            _ = external_call["dup2", Int32](null_fd, Int32(0))
-            _ = external_call["dup2", Int32](null_fd, Int32(1))
-            _ = external_call["dup2", Int32](null_fd, Int32(2))
-            if null_fd > 2:
-                _ = external_call["close", Int32](null_fd)
+        _ = external_call["dup2", Int32](null_fd, Int32(0))
+        _ = external_call["dup2", Int32](null_fd, Int32(1))
+        _ = external_call["dup2", Int32](null_fd, Int32(2))
         # pool starts with chrome_path (first arg)
         _ = external_call["execv", Int32](Int(pool), Int(argv))
         _ = external_call["_exit", Int32](Int32(1))
 
     # Parent: free buffers
+    dev_null.close()
     pool.unsafe_free()
     argv.unsafe_free()
 
@@ -493,7 +430,7 @@ struct Browser(Movable):
             JsonValue array of target objects.
         """
         var body = _tcp_get("localhost", self.port, "/json")
-        return parse_json(body)
+        return parse_json(body).to_value()
 
     def new_page(mut self) raises -> Page:
         """Open a new browser tab using CDP Target.createTarget.
@@ -535,7 +472,7 @@ struct Browser(Movable):
                 var resp = parse_json(text)
                 if resp.has_key("id"):
                     var resp_id = resp.get("id")
-                    if resp_id.kind == 2 and resp_id.as_int() == 1:
+                    if resp_id.is_int() and resp_id.as_int() == 1:
                         if resp.has_key("result"):
                             var result = resp.get("result")
                             if result.has_key("targetId"):
@@ -652,7 +589,7 @@ struct Page(Movable):
             # Check if this is our response (has matching id)
             if resp.has_key("id"):
                 var resp_id = resp.get("id")
-                if resp_id.kind == 2:  # JSON_NUMBER
+                if resp_id.is_int():
                     if resp_id.as_int() == msg_id:
                         # Check for error
                         if resp.has_key("error"):
@@ -661,7 +598,7 @@ struct Page(Movable):
                             if err.has_key("message"):
                                 err_msg = err.get_string("message")
                             raise Error("cdp: " + method + ": " + err_msg)
-                        return resp^
+                        return resp.to_value()
 
             # Otherwise it's an event — ignore and keep reading
 
@@ -708,15 +645,17 @@ struct Page(Movable):
                 var inner = result.get("result")
                 if inner.has_key("value"):
                     var val = inner.get("value")
-                    if val.kind == 3:  # JSON_STRING
+                    if val.is_string():
                         return val.as_string()
-                    elif val.kind == 2:  # JSON_NUMBER
+                    elif val.is_int():
                         return String(val.as_int())
-                    elif val.kind == 1:  # JSON_BOOL
+                    elif val.is_number():
+                        return String(val.as_number())
+                    elif val.is_bool():
                         if val.as_bool():
                             return String("true")
                         return String("false")
-                    elif val.kind == 0:  # JSON_NULL
+                    elif val.is_null():
                         return String("null")
 
         return String("")

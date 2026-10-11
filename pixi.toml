@@ -9,7 +9,8 @@ pkg-install = "~/.mojo/bin/mojo-pkg install"
 run = { cmd = "bash build_and_run.sh main.mojo", depends-on = ["pkg-install"] }
 test = { cmd = "bash build_and_run.sh test_cdp.mojo", depends-on = ["pkg-install"] }
 test-ci = "bash build_and_run.sh test_cdp.mojo"
-format = "mblack cdp.mojo main.mojo test_cdp.mojo"
+test-std-compat = "bash build_and_run.sh test_std_compat.mojo"
+format = "mblack cdp.mojo main.mojo test_cdp.mojo test_std_compat.mojo"
 
 [dependencies]
 mojo = ">=1.0.0"
