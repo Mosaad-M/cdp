@@ -27,7 +27,7 @@ from websocket import WebSocket, WebSocketFrame
 from json import JsonValue, parse_json
 from tcp import TcpSocket
 from std.ffi import external_call
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 from std.os import getenv
 from std.os.path import exists
 from std.time import monotonic, sleep
@@ -50,7 +50,7 @@ def _system(cmd: String) -> Int32:
     """Run a shell command via system() with explicit null-terminated buffer."""
     var cb = cmd.as_bytes()
     var n = len(cb)
-    var buf = alloc[UInt8](n + 1)
+    var buf = unsafe_alloc[UInt8](n + 1)
     for i in range(n):
         buf[unsafe_offset=i] = cb[i]
     buf[unsafe_offset=n] = 0
@@ -96,7 +96,7 @@ def _escape_js(s: String) -> String:
         else:
             var b = List[UInt8]()
             b.append(c)
-            result += String(unsafe_from_utf8=b^)
+            result += String(unsafe_from_utf8=b)
     return result
 
 
@@ -129,7 +129,7 @@ def _escape_json_string(s: String) -> String:
         else:
             var b = List[UInt8]()
             b.append(c)
-            result += String(unsafe_from_utf8=b^)
+            result += String(unsafe_from_utf8=b)
     return result
 
 
@@ -209,11 +209,11 @@ def _spawn_chrome(chrome_path: String, port: Int, headless: Bool) raises -> Int3
     var total = 0
     for i in range(n):
         total += len(args[i].as_bytes()) + 1
-    var pool = alloc[UInt8](total)
+    var pool = unsafe_alloc[UInt8](total)
     var offset = 0
 
     # Build char** argv array: (n+1) 8-byte pointer slots
-    var argv = alloc[UInt8]((n + 1) * 8)
+    var argv = unsafe_alloc[UInt8]((n + 1) * 8)
 
     for i in range(n):
         var b = args[i].as_bytes()
@@ -333,7 +333,7 @@ def _tcp_get(host: String, port: Int, path: String) raises -> String:
     var header_bytes = List[UInt8]()
     for i in range(header_end - 4):
         header_bytes.append(raw[i])
-    var headers = String(unsafe_from_utf8=header_bytes^)
+    var headers = String(unsafe_from_utf8=header_bytes)
 
     var body = List[UInt8]()
     for i in range(header_end, len(raw)):
@@ -350,7 +350,7 @@ def _tcp_get(host: String, port: Int, path: String) raises -> String:
 
     if len(body) == 0:
         raise Error("cdp: empty HTTP response body")
-    return String(unsafe_from_utf8=body^)
+    return String(unsafe_from_utf8=body)
 
 
 # ============================================================================

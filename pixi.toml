@@ -13,4 +13,4 @@ test-std-compat = "bash build_and_run.sh test_std_compat.mojo"
 format = "mblack cdp.mojo main.mojo test_cdp.mojo test_std_compat.mojo"
 
 [dependencies]
-mojo = ">=1.0.0"
+mojo = ">=1.2.0"
